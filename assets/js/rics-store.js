@@ -133,37 +133,40 @@ class RICSStore {
     renderItems() {
         const tbody = document.getElementById('items-tbody');
         const items = this.filteredData.items;
-
+    
         if (items.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 40px;">No items found</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 40px;">No items found</td></tr>';
             return;
         }
-
+    
         tbody.innerHTML = items.map(item => `
             <tr>
                 <td>
-                    <strong>${this.escapeHtml(item.name)}</strong>
+                    <div class="item-name">${this.escapeHtml(item.name)}</div>
                     <span class="metadata">
                         ${this.escapeHtml(item.defName)}
                         <br>From ${this.escapeHtml(item.mod)}
                         ${this.getUsageTypes(item)}
                     </span>
                 </td>
-                <td>${item.price}</td>
+                <td class="no-wrap">
+                    <strong>${item.price}</strong>
+                    <span class="mobile-priority primary"></span>
+                </td>
                 <td>${this.escapeHtml(item.category)}</td>
-                <td>${item.quantityLimit}</td>
+                <td class="no-wrap">${item.quantityLimit}</td>
                 <td>${item.limitMode || 'N/A'}</td>
             </tr>
         `).join('');
     }
-
+    
     getUsageTypes(item) {
         const types = [];
         if (item.isUsable) types.push('Usable');
         if (item.isEquippable) types.push('Equippable');
         if (item.isWearable) types.push('Wearable');
         
-        return types.length > 0 ? `<br>Usage: ${types.join(', ')}` : '';
+        return types.length > 0 ? `<br><span class="usage">Usage: ${types.join(', ')}</span>` : '';
     }
 
     renderEvents() {

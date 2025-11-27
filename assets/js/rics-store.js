@@ -4,7 +4,7 @@ class RICSStore {
         this.data = {
             items: [],
             events: [],
-            traits: [], 
+            traits: [],
             races: []
         };
         this.filteredData = {
@@ -28,26 +28,22 @@ class RICSStore {
             // Load items
             const itemsResponse = await fetch('data/StoreItems.json');
             const itemsData = await itemsResponse.json();
-            this.data.items = this.processItemsData(itemsData);
+            
+            // The items are now under "items" property in the JSON
+            if (itemsData.items) {
+                this.data.items = this.processItemsData(itemsData.items);
+            } else {
+                // Fallback for old structure
+                this.data.items = this.processItemsData(itemsData);
+            }
+            
             this.filteredData.items = [...this.data.items];
 
-            // Load events
-            const eventsResponse = await fetch('data/StoreEvents.json');
-            const eventsData = await eventsResponse.json();
-            this.data.events = this.processEventsData(eventsData);
-            this.filteredData.events = [...this.data.events];
-
-            // Load traits
-            const traitsResponse = await fetch('data/StoreTraits.json');
-            const traitsData = await traitsResponse.json();
-            this.data.traits = this.processTraitsData(traitsData);
-            this.filteredData.traits = [...this.data.traits];
-
-            // Load races
-            const racesResponse = await fetch('data/StoreRaces.json');
-            const racesData = await racesResponse.json();
-            this.data.races = this.processRacesData(racesData);
-            this.filteredData.races = [...this.data.races];
+            // Load other data types (you can add these later)
+            // const eventsResponse = await fetch('data/StoreEvents.json');
+            // const eventsData = await eventsResponse.json();
+            // this.data.events = this.processEventsData(eventsData);
+            // this.filteredData.events = [...this.data.events];
 
             console.log('Data loaded:', {
                 items: this.data.items.length,
@@ -62,21 +58,29 @@ class RICSStore {
         }
     }
 
-    processItemsData(data) {
-        return Object.entries(data)
-            .map(([defname, itemData]) => ({
-                defname,
-                name: itemData.CustomName || defname,
-                price: itemData.BasePrice || 0,
-                category: itemData.Category || 'Misc',
-                weight: itemData.Weight || 0,
-                quantityLimit: itemData.QuantityLimit || 0,
-                limitMode: itemData.LimitMode,
-                mod: itemData.Mod,
-                enabled: itemData.Enabled !== false,
-                karmaType: itemData.KarmaType
-            }))
-            .filter(item => item.enabled && item.price > 0);
+    processItemsData(itemsObject) {
+        return Object.entries(itemsObject)
+            .map(([key, itemData]) => {
+                // Use the structure from your sample
+                return {
+                    defName: itemData.DefName || key,
+                    name: itemData.CustomName || itemData.DefName || key,
+                    price: itemData.BasePrice || 0,
+                    category: itemData.Category || 'Misc',
+                    quantityLimit: itemData.HasQuantityLimit ? (itemData.QuantityLimit || 0) : 'Unlimited',
+                    limitMode: itemData.LimitMode,
+                    mod: itemData.Mod || 'Unknown',
+                    isUsable: itemData.IsUsable || false,
+                    isEquippable: itemData.IsEquippable || false,
+                    isWearable: itemData.IsWearable || false,
+                    enabled: itemData.Enabled !== false
+                };
+            })
+            .filter(item => {
+                // Only include if enabled AND at least one usage type is true
+                return item.enabled && (item.isUsable || item.isEquippable || item.isWearable);
+            })
+            .filter(item => item.price > 0); // Only items with price > 0
     }
 
     processEventsData(data) {
@@ -131,28 +135,35 @@ class RICSStore {
         const items = this.filteredData.items;
 
         if (items.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 40px;">No items found</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 40px;">No items found</td></tr>';
             return;
         }
 
         tbody.innerHTML = items.map(item => `
             <tr>
                 <td>
-                    ${this.escapeHtml(item.name)}
-                    ${item.mod ? `<span class="metadata">From ${this.escapeHtml(item.mod)}</span>` : ''}
+                    <strong>${this.escapeHtml(item.name)}</strong>
+                    <span class="metadata">
+                        ${this.escapeHtml(item.defName)}
+                        <br>From ${this.escapeHtml(item.mod)}
+                        ${this.getUsageTypes(item)}
+                    </span>
                 </td>
-                <td>
-                    ${item.price}
-                    ${item.karmaType ? `<span class="metadata">Karma: ${this.escapeHtml(item.karmaType)}</span>` : ''}
-                </td>
+                <td>${item.price}</td>
                 <td>${this.escapeHtml(item.category)}</td>
-                <td>${item.weight}</td>
-                <td>
-                    ${item.quantityLimit > 0 ? item.quantityLimit : 'Unlimited'}
-                    ${item.limitMode ? `<span class="metadata">${this.escapeHtml(item.limitMode)}</span>` : ''}
-                </td>
+                <td>${item.quantityLimit}</td>
+                <td>${item.limitMode || 'N/A'}</td>
             </tr>
         `).join('');
+    }
+
+    getUsageTypes(item) {
+        const types = [];
+        if (item.isUsable) types.push('Usable');
+        if (item.isEquippable) types.push('Equippable');
+        if (item.isWearable) types.push('Wearable');
+        
+        return types.length > 0 ? `<br>Usage: ${types.join(', ')}` : '';
     }
 
     renderEvents() {
@@ -280,6 +291,12 @@ class RICSStore {
             let aValue = a[field];
             let bValue = b[field];
 
+            // Handle "Unlimited" quantity limit for sorting
+            if (field === 'quantityLimit') {
+                aValue = aValue === 'Unlimited' ? Infinity : aValue;
+                bValue = bValue === 'Unlimited' ? Infinity : bValue;
+            }
+
             if (typeof aValue === 'string') {
                 aValue = aValue.toLowerCase();
                 bValue = bValue.toLowerCase();
@@ -318,9 +335,38 @@ class RICSStore {
     }
 
     loadSampleData() {
-        // Fallback sample data if JSON files can't be loaded
+        // Fallback sample data
         console.log('Loading sample data...');
-        // ... your sample data here
+        this.data.items = [
+            {
+                defName: "TextBook",
+                name: "Textbook",
+                price: 267,
+                category: "Books",
+                quantityLimit: 5,
+                limitMode: "OneStack",
+                mod: "Core",
+                isUsable: false,
+                isEquippable: false,
+                isWearable: false,
+                enabled: true
+            },
+            {
+                defName: "Schematic",
+                name: "Schematic", 
+                price: 250,
+                category: "Books",
+                quantityLimit: 5,
+                limitMode: "OneStack",
+                mod: "Core",
+                isUsable: false,
+                isEquippable: false,
+                isWearable: false,
+                enabled: true
+            }
+        ];
+        this.filteredData.items = [...this.data.items];
+        this.renderItems();
     }
 }
 
